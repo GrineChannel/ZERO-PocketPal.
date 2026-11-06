@@ -1,3 +1,4 @@
+
 module.exports = {
   preset: '@react-native/jest-preset',
   resolver: '<rootDir>/jest/resolver.js',
@@ -84,8 +85,6 @@ module.exports = {
       '<rootDir>/__mocks__/external/react-native-vision-camera.ts',
     '@react-native-google-signin/google-signin':
       '<rootDir>/__mocks__/external/@react-native-google-signin/google-signin.ts',
-    '@invertase/react-native-apple-authentication':
-      '<rootDir>/__mocks__/external/@invertase/react-native-apple-authentication.ts',
     'react-native-code-highlighter':
       '<rootDir>/__mocks__/external/react-native-code-highlighter.js',
     '@env': '<rootDir>/__mocks__/external/@env.js',
