@@ -1,4 +1,6 @@
 
+// Tests for AuthService.loadUserProfile column-narrowing and no-rows handling
+
 describe('AuthService.loadUserProfile', () => {
   const setup = (singleResult: {data: any; error: any}) => {
     jest.resetModules();
@@ -73,6 +75,7 @@ describe('AuthService.signOut', () => {
     const removeItem = jest.fn();
     const clear = jest.fn();
     const multiRemove = jest.fn();
+
     jest.doMock('@react-native-async-storage/async-storage', () => ({
       getItem: jest.fn(async () => null),
       setItem: jest.fn(),
@@ -80,6 +83,7 @@ describe('AuthService.signOut', () => {
       clear,
       multiRemove,
     }));
+
     jest.doMock('../supabase', () => ({
       supabase: {
         auth: {
@@ -91,6 +95,7 @@ describe('AuthService.signOut', () => {
         },
       },
     }));
+
     const deletePal = jest.fn();
     jest.doMock('../../../repositories/PalRepository', () => ({
       palRepository: {deletePal},
@@ -109,7 +114,9 @@ describe('AuthService.signOut', () => {
 describe('AuthService.signOut scope', () => {
   const setup = () => {
     jest.resetModules();
+
     const signOut = jest.fn().mockResolvedValue({error: null});
+
     jest.doMock('../supabase', () => ({
       supabase: {
         auth: {
@@ -121,6 +128,7 @@ describe('AuthService.signOut scope', () => {
         },
       },
     }));
+
     const {authService} = require('../AuthService');
     return {authService, signOut};
   };
@@ -167,6 +175,7 @@ describe('AuthService.signOut scope', () => {
 describe('AuthService.resetLocalSession', () => {
   it('clears the session, user, signed-in flag and profile', () => {
     jest.resetModules();
+
     jest.doMock('../supabase', () => ({
       supabase: {
         auth: {
@@ -177,7 +186,9 @@ describe('AuthService.resetLocalSession', () => {
         },
       },
     }));
+
     const {authService} = require('../AuthService');
+
     authService.session = {access_token: 't'};
     authService.user = {id: 'u1'};
     authService.isAuthenticated = true;
