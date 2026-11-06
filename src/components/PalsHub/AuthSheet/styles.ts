@@ -1,3 +1,4 @@
+
 import {StyleSheet} from 'react-native';
 import {Theme} from '../../../utils';
 
@@ -55,11 +56,6 @@ export const createStyles = (theme: Theme) =>
       paddingHorizontal: 16,
       fontSize: 14,
       color: theme.colors.onSurfaceVariant,
-    },
-    authAppleButton: {
-      width: '100%',
-      height: 48,
-      marginBottom: 12,
     },
     authSocialButton: {
       height: 48,
