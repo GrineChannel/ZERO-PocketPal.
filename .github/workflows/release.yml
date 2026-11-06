@@ -38,7 +38,7 @@ jobs:
           fetch-depth: 0
           ssh-key: ${{ secrets.DEPLOY_KEY }}
 
-      # Must precede setup-java and setup-node
+      # Maximize build space
       - name: Maximize build space
         run: |
           df -h /
