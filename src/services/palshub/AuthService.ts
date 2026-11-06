@@ -1,3 +1,4 @@
+
 import {makeAutoObservable, runInAction} from 'mobx';
 import {makePersistable} from 'mobx-persist-store';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -6,24 +7,16 @@ import {
   SUPABASE_URL,
   SUPABASE_ANON_KEY,
   APP_URL,
-  GOOGLE_IOS_CLIENT_ID,
   GOOGLE_WEB_CLIENT_ID,
 } from '@env';
 import {
-  isAuthApiError,
-  isAuthRetryableFetchError,
   type User,
   type Session,
-  type UserIdentity,
 } from '@supabase/supabase-js';
 import {
   GoogleSignin,
   statusCodes,
 } from '@react-native-google-signin/google-signin';
-import {
-  appleAuth,
-  type AppleRequestResponseFullName,
-} from '@invertase/react-native-apple-authentication';
 
 export interface Profile {
   id: string;
@@ -38,11 +31,6 @@ export interface Profile {
   updated_at?: string;
 }
 
-export type AppleReauthResult =
-  | {kind: 'code'; code: string; appleUser: string}
-  | {kind: 'cancelled'}
-  | {kind: 'unavailable'};
-
 export interface AuthState {
   user: User | null;
   profile: Profile | null;
@@ -51,30 +39,6 @@ export interface AuthState {
   isAuthenticated: boolean;
   error: string | null;
 }
-
-const APPLE_SIGN_IN_MESSAGES = {
-  cancelled: 'Sign-in was cancelled',
-  unreachable:
-    "Couldn't reach the server. Check your connection and try again.",
-  unavailable:
-    "Sign in with Apple isn't available right now. Please try again later or use another sign-in method.",
-  noAppleAccount:
-    'Sign in to your Apple Account in Settings to use Sign in with Apple.',
-  failed: 'Sign in with Apple failed. Please try again.',
-};
-
-const appleSignInErrorMessage = (error: any): string => {
-  if (isAuthRetryableFetchError(error) || error?.status >= 500) {
-    return APPLE_SIGN_IN_MESSAGES.unreachable;
-  }
-  if (isAuthApiError(error) && error.status >= 400) {
-    return APPLE_SIGN_IN_MESSAGES.unavailable;
-  }
-  if (error?.code === appleAuth.Error.UNKNOWN) {
-    return APPLE_SIGN_IN_MESSAGES.noAppleAccount;
-  }
-  return APPLE_SIGN_IN_MESSAGES.failed;
-};
 
 class AuthService {
   user: User | null = null;
@@ -89,20 +53,18 @@ class AuthService {
       makeAutoObservable(this);
       makePersistable(this, {
         name: 'AuthService',
-        properties: ['profile'], // Only persist profile, let Supabase handle session
+        properties: ['profile'],
         storage: AsyncStorage,
       });
 
-      // Check if Supabase is properly configured
       if (this.isSupabaseConfigured()) {
         console.log(
           'AuthService: Supabase is configured, initializing auth listener',
         );
-        // Listen for auth state changes
+
         this.initAuthListener();
-        // Configure Google Sign-In
         this.configureGoogleSignIn();
-        // Check for existing session
+
         this.checkExistingSession().then(() => {
           console.log('AuthService: Session restoration completed');
         });
@@ -217,7 +179,6 @@ class AuthService {
         .single();
 
       if (error && error.code !== 'PGRST116') {
-        // PGRST116 = no rows returned
         console.error('Error loading profile:', error);
         return;
       }
@@ -234,9 +195,9 @@ class AuthService {
     try {
       GoogleSignin.configure({
         webClientId: GOOGLE_WEB_CLIENT_ID,
-        iosClientId: GOOGLE_IOS_CLIENT_ID,
         offlineAccess: false,
       });
+
       console.log('Google Sign-In configured successfully');
     } catch (error) {
       console.error('Error configuring Google Sign-In:', error);
@@ -257,15 +218,15 @@ class AuthService {
         this.error = null;
       });
 
-      // Check if Google Play Services are available
       console.log('Checking Google Play Services...');
       await GoogleSignin.hasPlayServices();
       console.log('Google Play Services available');
 
-      // Check if user is already signed in
       console.log('Checking current user...');
+
       try {
         const currentUser = GoogleSignin.getCurrentUser();
+
         if (currentUser) {
           console.log('User already signed in, signing out first...');
           await GoogleSignin.signOut();
@@ -274,18 +235,19 @@ class AuthService {
         console.log('No current user signed in: ', error);
       }
 
-      // Sign in with Google
       console.log('Starting Google Sign-In...');
+
       const userInfo = await GoogleSignin.signIn();
+
       console.log('Google Sign-In completed:', !!userInfo.data);
 
       if (userInfo.data?.idToken) {
         console.log(
           'Google sign-in successful, attempting Supabase authentication...',
         );
+
         console.log('ID Token length:', userInfo.data.idToken.length);
 
-        // Use the ID token to sign in with Supabase (nonce disabled)
         const {data, error} = await supabase!.auth.signInWithIdToken({
           provider: 'google',
           token: userInfo.data.idToken,
@@ -295,6 +257,7 @@ class AuthService {
           runInAction(() => {
             this.error = error.message;
           });
+
           console.error('Supabase Google sign-in error:', error);
         } else {
           console.log('Google sign-in successful:', data);
@@ -303,6 +266,7 @@ class AuthService {
         runInAction(() => {
           this.error = 'No ID token received from Google';
         });
+
         console.error('No ID token present in Google sign-in response');
       }
     } catch (error: any) {
@@ -319,105 +283,13 @@ class AuthService {
       runInAction(() => {
         this.error = errorMessage;
       });
+
       console.error('Google sign-in error:', error);
     } finally {
       runInAction(() => {
         this.isLoading = false;
       });
     }
-  }
-
-  async signInWithApple() {
-    if (!this.isSupabaseConfigured()) {
-      runInAction(() => {
-        this.error = 'Authentication not configured';
-      });
-      return;
-    }
-
-    try {
-      runInAction(() => {
-        this.isLoading = true;
-        this.error = null;
-      });
-
-      const response = await appleAuth.performRequest({
-        requestedOperation: appleAuth.Operation.LOGIN,
-        requestedScopes: [appleAuth.Scope.EMAIL, appleAuth.Scope.FULL_NAME],
-      });
-
-      if (!response.identityToken) {
-        runInAction(() => {
-          this.error = APPLE_SIGN_IN_MESSAGES.failed;
-        });
-        console.error('No ID token present in Apple sign-in response');
-        return;
-      }
-
-      const {data, error} = await supabase!.auth.signInWithIdToken({
-        provider: 'apple',
-        token: response.identityToken,
-        nonce: response.nonce,
-      });
-
-      if (error) {
-        runInAction(() => {
-          this.error = appleSignInErrorMessage(error);
-        });
-        console.error('Supabase Apple sign-in error:', error);
-        return;
-      }
-
-      await this.storeFirstAppleName(data.user.id, response.fullName);
-    } catch (error: any) {
-      if (error?.code === appleAuth.Error.CANCELED) {
-        runInAction(() => {
-          this.error = APPLE_SIGN_IN_MESSAGES.cancelled;
-        });
-        console.warn('Apple sign-in cancelled');
-        return;
-      }
-      runInAction(() => {
-        this.error = appleSignInErrorMessage(error);
-      });
-      console.error('Apple sign-in error:', error);
-    } finally {
-      runInAction(() => {
-        this.isLoading = false;
-      });
-    }
-  }
-
-  private async storeFirstAppleName(
-    userId: string,
-    appleName: AppleRequestResponseFullName | null,
-  ) {
-    const fullName = [appleName?.givenName, appleName?.familyName]
-      .map(part => part?.trim())
-      .filter(Boolean)
-      .join(' ');
-    const hasStoredName =
-      this.profile?.id === userId && !!this.profile.full_name;
-    if (!fullName || hasStoredName) {
-      return;
-    }
-
-    const results = await Promise.allSettled([
-      supabase!.auth.updateUser({data: {full_name: fullName}}),
-      supabase!
-        .from('profiles')
-        .update({full_name: fullName, updated_at: new Date().toISOString()})
-        .eq('id', userId),
-    ]);
-    results.forEach(result => {
-      const failure =
-        result.status === 'rejected' ? result.reason : result.value.error;
-      if (failure) {
-        console.error('Error storing Apple name:', failure);
-      }
-    });
-
-    await this.loadUserProfile(userId);
   }
 
   async signInWithEmail(email: string, password: string): Promise<boolean> {
@@ -443,14 +315,17 @@ class AuthService {
         runInAction(() => {
           this.error = error.message;
         });
+
         console.error('Email sign-in error:', error);
         return false;
       }
+
       return true;
     } catch (error) {
       runInAction(() => {
         this.error = 'Failed to sign in with email';
       });
+
       console.error('Email sign-in error:', error);
       return false;
     } finally {
@@ -492,14 +367,17 @@ class AuthService {
         runInAction(() => {
           this.error = error.message;
         });
+
         console.error('Email sign-up error:', error);
         return false;
       }
+
       return true;
     } catch (error) {
       runInAction(() => {
         this.error = 'Failed to sign up with email';
       });
+
       console.error('Email sign-up error:', error);
       return false;
     } finally {
@@ -509,81 +387,45 @@ class AuthService {
     }
   }
 
-  private get appleIdentity(): UserIdentity | undefined {
-    return this.user?.identities?.find(
-      identity => identity.provider === 'apple',
-    );
-  }
-
-  hasAppleIdentity(): boolean {
-    return (
-      !!this.appleIdentity ||
-      !!this.user?.app_metadata?.providers?.includes('apple')
-    );
-  }
-
-  appleSubject(): string | null {
-    const identity = this.appleIdentity;
-    return identity ? (identity.identity_data?.sub ?? identity.id) : null;
-  }
-
-  async reauthorizeWithApple(): Promise<AppleReauthResult> {
-    try {
-      const response = await appleAuth.performRequest({
-        requestedOperation: appleAuth.Operation.LOGIN,
-        requestedScopes: [],
-      });
-      return response.authorizationCode
-        ? {
-            kind: 'code',
-            code: response.authorizationCode,
-            appleUser: response.user,
-          }
-        : {kind: 'unavailable'};
-    } catch (error: any) {
-      return error?.code === appleAuth.Error.CANCELED
-        ? {kind: 'cancelled'}
-        : {kind: 'unavailable'};
-    }
-  }
-
   async signOut({scope}: {scope?: 'global' | 'local'} = {}): Promise<boolean> {
     let signedOut = true;
+
     try {
       runInAction(() => {
         this.isLoading = true;
         this.error = null;
       });
 
-      // Sign out from Supabase if configured
       if (supabase) {
         const {error} = await supabase.auth.signOut(
           scope ? {scope} : undefined,
         );
+
         if (error) {
           console.error('Supabase sign-out error:', error);
           signedOut = false;
         }
       }
 
-      // Also sign out from Google if user was signed in with Google
       try {
         await GoogleSignin.signOut();
       } catch (googleError) {
         console.warn('Error signing out from Google:', googleError);
-        // Don't fail the entire sign-out process if Google sign-out fails
       }
     } catch (error) {
       signedOut = false;
+
       runInAction(() => {
         this.error = 'Failed to sign out';
       });
+
       console.error('Sign-out error:', error);
     } finally {
       runInAction(() => {
         this.isLoading = false;
       });
     }
+
     return signedOut;
   }
 
@@ -618,14 +460,17 @@ class AuthService {
         runInAction(() => {
           this.error = error.message;
         });
+
         console.error('Password reset error:', error);
         return false;
       }
+
       return true;
     } catch (error) {
       runInAction(() => {
         this.error = 'Failed to send password reset email';
       });
+
       console.error('Password reset error:', error);
       return false;
     } finally {
