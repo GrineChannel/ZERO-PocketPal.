@@ -1,13 +1,10 @@
+
 import React, {useState, useEffect} from 'react';
-import {View, Alert, Platform} from 'react-native';
+import {View, Alert} from 'react-native';
 
 import {observer} from 'mobx-react-lite';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {Text, Button, TextInput, ActivityIndicator} from 'react-native-paper';
-import {
-  AppleButton,
-  appleAuth,
-} from '@invertase/react-native-apple-authentication';
 
 import {GoogleIcon} from '../../../assets/icons';
 
@@ -31,9 +28,6 @@ export const AuthSheet: React.FC<AuthSheetProps> = observer(
     const theme = useTheme();
     const insets = useSafeAreaInsets();
     const styles = createStyles(theme);
-    const paperButtonRadius = 5 * theme.roundness;
-    const isAppleSignInAvailable =
-      Platform.OS === 'ios' && appleAuth.isSupported;
 
     const [isSignUp, setIsSignUp] = useState(false);
     const [email, setEmail] = useState('');
@@ -43,7 +37,6 @@ export const AuthSheet: React.FC<AuthSheetProps> = observer(
 
     const authState = authService.authState;
 
-    // Close sheet automatically when user becomes authenticated
     useEffect(() => {
       if (authState.isAuthenticated && isVisible) {
         onClose();
@@ -71,6 +64,7 @@ export const AuthSheet: React.FC<AuthSheetProps> = observer(
             password,
             fullName.trim(),
           );
+
           if (ok) {
             Alert.alert(
               'Account Created',
@@ -80,6 +74,7 @@ export const AuthSheet: React.FC<AuthSheetProps> = observer(
           }
         } else {
           const ok = await authService.signInWithEmail(email.trim(), password);
+
           if (ok) {
             Alert.alert('Welcome Back!', 'You have successfully signed in.', [
               {text: 'OK', onPress: onClose},
@@ -100,25 +95,11 @@ export const AuthSheet: React.FC<AuthSheetProps> = observer(
         authService.clearError();
 
         await authService.signInWithGoogle();
-        // Sheet will close automatically via useEffect when auth state changes
       } catch (error) {
         const errorInfo = PalsHubErrorHandler.handle(error);
         Alert.alert('Google Sign-In Error', errorInfo.userMessage);
       } finally {
         setIsLoading(false);
-      }
-    };
-
-    const handleAppleAuth = async () => {
-      if (authService.isLoading) {
-        return;
-      }
-      try {
-        authService.clearError();
-        await authService.signInWithApple();
-      } catch (error) {
-        const errorInfo = PalsHubErrorHandler.handle(error);
-        Alert.alert('Apple Sign-In Error', errorInfo.userMessage);
       }
     };
 
@@ -130,7 +111,9 @@ export const AuthSheet: React.FC<AuthSheetProps> = observer(
 
       try {
         setIsLoading(true);
+
         const ok = await authService.resetPassword(email.trim());
+
         if (ok) {
           Alert.alert(
             'Password Reset',
@@ -170,7 +153,6 @@ export const AuthSheet: React.FC<AuthSheetProps> = observer(
             styles.authSheet,
             {paddingBottom: insets.bottom + 16},
           ]}>
-          {/* Loading Indicator */}
           {authState.isLoading && (
             <View style={styles.authLoadingContainer}>
               <ActivityIndicator size="large" color={theme.colors.primary} />
@@ -178,14 +160,12 @@ export const AuthSheet: React.FC<AuthSheetProps> = observer(
             </View>
           )}
 
-          {/* Error Message */}
           {authState.error && (
             <Text style={[styles.authSubtitle, styles.authErrorText]}>
               {authState.error}
             </Text>
           )}
 
-          {/* Email/Password Form */}
           <View style={styles.authForm}>
             {isSignUp && (
               <TextInput
@@ -246,27 +226,12 @@ export const AuthSheet: React.FC<AuthSheetProps> = observer(
             )}
           </View>
 
-          {/* Divider */}
           <View style={styles.authDivider}>
             <View style={styles.authDividerLine} />
             <Text style={styles.authDividerText}>or</Text>
             <View style={styles.authDividerLine} />
           </View>
 
-          {isAppleSignInAvailable && (
-            <AppleButton
-              testID="auth-apple-button"
-              buttonType={AppleButton.Type.SIGN_IN}
-              buttonStyle={
-                theme.dark ? AppleButton.Style.WHITE : AppleButton.Style.BLACK
-              }
-              cornerRadius={paperButtonRadius}
-              style={styles.authAppleButton}
-              onPress={handleAppleAuth}
-            />
-          )}
-
-          {/* Google Sign-In */}
           <Button
             mode="outlined"
             onPress={handleGoogleAuth}
@@ -278,7 +243,6 @@ export const AuthSheet: React.FC<AuthSheetProps> = observer(
             Continue with Google
           </Button>
 
-          {/* Toggle Sign Up/Sign In */}
           <View style={styles.authToggle}>
             <Text style={styles.authToggleText}>
               {isSignUp
